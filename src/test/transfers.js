@@ -97,8 +97,8 @@ contract("Transfers", function(accounts) {
 	}).then(function() {
 	    return core.charityStatus(charity1);
 	}).then(function(bool) {
-	    ethOld = web3.eth.getBalance(charity1).toNumber();
 	    assert.equal(bool, true, "Should be a charity now");
+	    ethOld = web3.eth.getBalance(charity1).toNumber();
 	    ibis.withdrawOwner(charity1, withdraw1, {from: owner1});
 	}).then(function() {
 	    return ibis.balanceOf(charity1);

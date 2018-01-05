@@ -35,12 +35,12 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
 
     // address freezing/redistribution
     uint public awardMax;                      // maximum award that can be claimed in one block
-    uint public frozenMinTime;                 // min time between freezing and redistribution
-    uint public awardMinTime;                  // min time to wait for charities to claim reward
-    mapping(uint => uint) awardValue;          // value of award at a given block
-    mapping(uint => uint) awardTarget;      // target address that would be closest
-    mapping(uint => uint) awardClosest;     // current winning bid for block award
-    mapping(address => bool) frozenVoted;      // votes cast by previously frozen accounts
+    uint public frozenMinTime = 1000;                 // min time between freezing and redistribution
+    uint public awardMinTime = 1000;                  // min time to wait for charities to claim reward
+    mapping(uint => uint) public awardValue;          // value of award at a given block
+    mapping(uint => uint) public awardTarget;      // target address that would be closest
+    mapping(uint => uint) public awardClosest;     // current winning bid for block award
+    mapping(address => bool) public frozenVoted;      // votes cast by previously frozen accounts
 
     // initial grace period emergency update
     uint graceInit;
@@ -59,9 +59,10 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
 
     /// Define restricted ownership, voting parameters, and the Core contract
     function Ibis(address _core, address [] _owners, uint _ownerThreshold, address nukeMaster) public
-        Restricted(_owners, _ownerThreshold, nukeMaster)
+	Restricted(_owners, _ownerThreshold, nukeMaster)
 	Democratic(VOTE_DURATION, MAX_NUKES)
     {
+
 	graceInit = block.timestamp;
 	core = Core(_core);
     }
@@ -351,6 +352,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
 	core.setBalances(_addr, core.balances(_addr) + voteBalances[_addr]);
 	delete voteBalances[_addr];
     }
+
 }
 
 /// Abstract contract placeholder to facilitate a future transition to the next version of Ibis
@@ -366,5 +368,5 @@ contract ERC223ReceivingContract {
 /// for testing
 contract IbisNewConcrete is IbisNew {
     function IbisNewConcrete(){}
-    function init(uint /*totalSupply*/) public returns (bool){return true;}
+    function init(uint) public returns (bool){return true;}
 }
