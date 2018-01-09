@@ -9,9 +9,10 @@ contract Restricted {
 
     address masterAddress;
 
-    mapping(bytes32 => mapping(address => bool)) supporting;
-    mapping(bytes32 => uint) numSupporting;
-    mapping(bytes32 => uint) initTime;
+    mapping(bytes32 => mapping(address => bool)) public supporting;
+    mapping(bytes32 => uint) public numSupporting;
+    mapping(bytes32 => uint) public delayInitTime;
+    mapping(bytes32 => uint) public ownerInitTime;
 
     uint public numOwners;
     uint public delayDuration = 1000;
@@ -35,7 +36,7 @@ contract Restricted {
 	    assembly{stop}
 	}
 	_;
-	delete initTime[_operation];
+	delete ownerInitTime[_operation];
     }
 
     modifier isMaster() {
@@ -50,7 +51,7 @@ contract Restricted {
 	    assembly{stop}
 	}
 	_;
-	delete initTime[_operation];
+	delete delayInitTime[_operation];
     }
 
     ///---------------------------------- Public Methods ------------------------------------///
@@ -122,14 +123,14 @@ contract Restricted {
 
     /// Cancel a currently delayed operation
     function killDelayed(bytes32 _operation) public multiowner(keccak256(msg.data)) {
-	delete initTime[_operation];
+	delete delayInitTime[_operation];
     }
 
     /// Allow an owner to revoke a previously approved call in a multi-owner vote
     function ownerRevoke(bytes32 _operation) public isOwner {
 	supporting[_operation][msg.sender] = false;
 	if(numSupporting[_operation] == 0) {
-	    delete initTime[_operation];
+	    delete ownerInitTime[_operation];
 	}
     }
 
@@ -137,7 +138,7 @@ contract Restricted {
     function checkOwners(bytes32 _operation) private returns (bool) {
 
 	// if operation has already been approved then pass through
-	if(initTime[_operation] != 0) {
+	if(ownerInitTime[_operation] != 0) {
 	    return true;
 	}
 
@@ -148,7 +149,7 @@ contract Restricted {
 
 	    // if enough owners have approved then continue execution
 	    if(numSupporting[_operation] >= threshold) {
-		initTime[_operation] = block.timestamp;
+		ownerInitTime[_operation] = block.timestamp;
 		return true;
 	    }
 	}
@@ -156,13 +157,11 @@ contract Restricted {
 
     /// Check to see if the call has been sufficiently delayed and if so return true
     function checkDelay(bytes32 _operation) private returns (bool) {
-	if(initTime[_operation] == 0) {
-	    initTime[_operation] = block.timestamp;
+	if(delayInitTime[_operation] == 0) {
+	    delayInitTime[_operation] = block.timestamp;
 	}
 
-	if(block.timestamp >= initTime[_operation] + delayDuration) {
-	    return true;
-	}
+	return block.timestamp >= delayInitTime[_operation] + delayDuration;
     }
 
     function RestrictedDestruct() internal {

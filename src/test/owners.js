@@ -35,7 +35,7 @@ contract("Owners", function(accounts) {
 	    return ibis.addOwner(owner4, {from: owner1});
 	}).then(function() {
 	    var wait = {jsonrpc: "2.0", method: "evm_increaseTime", params: [delayDuration], id: 0};
-	    web3.currentProvider.send(wait);
+	    return web3.currentProvider.send(wait);
 	}).then(function() {
 	    return ibis.addOwner(owner4, {from: owner1});
 	}).then(function() {
@@ -45,7 +45,7 @@ contract("Owners", function(accounts) {
 	    return ibis.addOwner(owner4, {from: owner2});
 	}).then(function() {
 	    var wait = {jsonrpc: "2.0", method: "evm_increaseTime", params: [delayDuration], id: 0};
-	    web3.currentProvider.send(wait);
+	    return web3.currentProvider.send(wait);
 	}).then(function() {
 	    return ibis.addOwner(owner4, {from: owner1});
 	}).then(function() {

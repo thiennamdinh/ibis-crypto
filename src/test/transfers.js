@@ -72,7 +72,7 @@ contract("Transfers", function(accounts) {
 	    return ibis.balanceOf(user2);
 	}).then(function(balance) {
 	    assert.equal(balance.toNumber(), deposit2 + transfer1, "balance of account 2 is wrong");
-	    ibis.transfer(charity1, transfer2, {from: user2});
+	    return ibis.transfer(charity1, transfer2, {from: user2});
 	}).then(function() {
 	    return ibis.balanceOf(charity1);
 	}).then(function(balance) {
@@ -84,6 +84,7 @@ contract("Transfers", function(accounts) {
     it("should allow charities to withdraw", function() {
 
 	var ethOld;
+	var ethNew;
 
 	return ibis.addCharity(charity1, {from: owner1}).then(function() {
 	    return core.charityStatus(charity1);
@@ -91,21 +92,21 @@ contract("Transfers", function(accounts) {
 	    assert.equal(bool, false, "Should not be a charity yet");
 	}).then(function() {
 	    var wait = {jsonrpc: "2.0", method: "evm_increaseTime", params: [delayDuration], id: 0};
-	    web3.currentProvider.send(wait);
+	    return web3.currentProvider.send(wait);
 	}).then(function() {
-	    ibis.addCharity(charity1, {from: owner1});
+	    return ibis.addCharity(charity1, {from: owner1});
 	}).then(function() {
 	    return core.charityStatus(charity1);
 	}).then(function(bool) {
 	    assert.equal(bool, true, "Should be a charity now");
-	    ethOld = web3.eth.getBalance(charity1).toNumber();
-	    ibis.withdrawOwner(charity1, withdraw1, {from: owner1});
+	    ethOld = web3.eth.getBalance(charity1)
+	    return ibis.withdrawOwner(charity1, withdraw1, {from: owner1});
 	}).then(function() {
 	    return ibis.balanceOf(charity1);
 	}).then(function(balance) {
 	    assert.equal(balance.toNumber(), transfer2 - withdraw1, "Charity balance did not reduce");
-	    var ethNew = web3.eth.getBalance(charity1).toNumber();
-	    assert.equal(ethNew, ethOld + withdraw1, "Eth did not transfer");
+	    ethNew = web3.eth.getBalance(charity1)
+	    assert.equal(ethNew.toString(10), ethOld.plus(withdraw1).toString(10), "Did not transfer");
 	});
     });
 });

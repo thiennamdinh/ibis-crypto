@@ -34,7 +34,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     Core public core;
 
     // address freezing/redistribution
-    uint public awardMax;                      // maximum award that can be claimed in one block
+    uint public awardMax = 1e18;                      // maximum award that can be claimed in one block
     uint public frozenMinTime = 1000;                 // min time between freezing and redistribution
     uint public awardMinTime = 1000;                  // min time to wait for charities to claim reward
     mapping(uint => uint) public awardValue;          // value of award at a given block
@@ -201,12 +201,11 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
 
     /// Suspend accounts by moving the existing balance into a frozen funds table
     function freezeAccounts(address[] _accounts) public isOwner suspendable {
-	uint time = block.timestamp;
 	for(uint i = 0; i < _accounts.length; i++) {
 	    uint balance = core.balances(_accounts[i]);
 	    core.setBalances(_accounts[i], 0);
 	    core.setFrozenValue(_accounts[i], balance);
-	    core.setFrozenTime(_accounts[i], time);
+	    core.setFrozenTime(_accounts[i], block.timestamp);
 	    LogFreeze(_accounts[i], true);
 	}
     }
@@ -226,11 +225,10 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     /// Liquidate frozen accounts and offer funds as reward for a randomly selected charity
     function awardExcess(address[] _accounts) public isOwner delayed(keccak256(msg.data))
 	votable(keccak256(msg.data), MAJORITY, false) {
-
 	uint frozenAward;
 
 	for(uint i = 0; i < _accounts.length; i++) {
-	    if(core.frozenTime(_accounts[i]) + frozenMinTime < block.timestamp) {
+	    if(block.timestamp < core.frozenTime(_accounts[i]) + frozenMinTime) {
 		continue;
 	    }
 	    uint frozen = core.frozenValue(_accounts[i]);
@@ -246,7 +244,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
 	}
 
 	// prepare reward slot
-	awardValue[block.timestamp] = frozenAward;
+        awardValue[block.timestamp] = frozenAward;
 	awardTarget[block.timestamp] = uint(block.blockhash(block.number));
 	awardClosest[block.timestamp] = awardTarget[block.timestamp] + (MAX_UINT256 / 2);
 	LogAward(block.timestamp, address(0), "initialized");
