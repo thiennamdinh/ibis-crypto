@@ -1,53 +1,54 @@
+/**
+ * Define functions and modifiers needed to implement a democratic voting
+ * system. Voting stake can be obtained by "registering". A user's voting power
+ * is determined by the inheriting contract with the intention. Once registered,
+ * users can declare support or dissent for any active issue, identifiable by
+ * its message data.
+ */
+
 pragma solidity ^0.4.13;
+
+// TODO democratic events
 
 contract Democratic {
 
-    enum Ballot {EMPTY, SUPPORTING, DISSENTING}
+    // possible  voting states
+    enum Ballot {UNDECIDED, SUPPORTING, DISSENTING}
 
+    // state of a single open operation that can be voted on
     struct Issue {
-	uint initTime;
-	uint threshold;
+	uint initTime;              // time at which an issue was first opened
+	uint threshold;             // percentage support (0-100) required to pass the vote
 
-	uint supportingTotal;
-	uint dissentingTotal;
+	uint supportingTotal;       // total votes in favor of the operation
+	uint dissentingTotal;       // total against the operation
 
-	mapping(address => Ballot) ballots;
+	mapping(address => Ballot) ballots;    // track individual votes
     }
 
-    // constructor-defined constants
-    uint public maxSuspensions;
-    uint public voteDuration;
-
-    // variables to track suspensions
-    uint public usedSuspensions;
-    uint public activeSuspensions;
+    uint public voteDuration;       // window of time available to vote on an issue
 
     // variables to track voting issues
     uint activeIssues;
-    mapping(bytes32 => Issue) public issues;          // map of active issues to be voted by the public
-    mapping(address => uint) public numParticipating;
-    mapping(address => uint) public votingStake;    // balance that a user has spent on voting power
+    mapping(bytes32 => Issue) public issues;            // map of active issues to be voted by the public
+    mapping(address => uint) public numParticipating;   //
+    mapping(address => uint) public votingStake;        // balance that a user has spent on voting power
 
     /// Function call must be approved by a majority of token stakeholders
-    modifier votable(bytes32 _operation, uint percent, bool suspend) {
-	if(!checkVotes(_operation, percent, suspend)) {
+    modifier votable(bytes32 _operation, uint percent) {
+	if(!checkVotes(_operation, percent)) {
 	    assembly{stop}
 	}
 	_;
 	delete issues[_operation];
     }
 
-    modifier suspendable() {
-	if(activeSuspensions == 0) {
-	    _;
-	}
-    }
-
-    function Democratic(uint _voteDuration, uint _maxSuspensions) public {
+    /// Set constructor parameters
+    function Democratic(uint _voteDuration) public {
 	voteDuration = _voteDuration;
-	maxSuspensions = _maxSuspensions;
     }
 
+    /// Register to vote. Cannot call this method more than once before unregistering
     function register(uint _votes) public {
 	// cannot register if already registered
 	if(votingStake[msg.sender] == 0) {
@@ -55,7 +56,7 @@ contract Democratic {
 	}
     }
 
-    /// Allow users to unregister themselves if they are not actively participating
+    /// Unregister voting rights if not participating in any issues
     function unregister() public {
 	if(votingStake[msg.sender] != 0 && numParticipating[msg.sender] == 0) {
 	    delete votingStake[msg.sender];
@@ -63,7 +64,7 @@ contract Democratic {
 	}
     }
 
-    /// Allow anybody to unregister a voter if there are no active issues
+    /// Allow anybody to unregister a voter if there are no active issues at all
     function unregisterFor(address _addr) public {
 	if(votingStake[_addr] != 0 && activeIssues == 0) {
 	    delete votingStake[_addr];
@@ -71,10 +72,11 @@ contract Democratic {
 	}
     }
 
+    /// Declare support or dissent of a votable issue
     function vote(bytes32 _operation, bool _supporting) public {
 
 	// already voted on this issue
-	if(issues[_operation].ballots[msg.sender] != Ballot.EMPTY) {
+	if(issues[_operation].ballots[msg.sender] != Ballot.UNDECIDED) {
 	    return;
 	}
 
@@ -91,13 +93,15 @@ contract Democratic {
 	numParticipating[msg.sender]++;
     }
 
+    /// Withdraw vote from a given issue
     function unvote(bytes32 _operation) public {
 
-	// user hasn't voted on this issue
-	if(issues[_operation].ballots[msg.sender] == Ballot.EMPTY) {
+	// check that user hasn't voted on this issue already
+	if(issues[_operation].ballots[msg.sender] == Ballot.UNDECIDED) {
 	    return;
 	}
 
+	// update the voting counts
 	if(issues[_operation].ballots[msg.sender] == Ballot.SUPPORTING) {
 	    issues[_operation].supportingTotal -= votingStake[msg.sender];
 	}
@@ -105,14 +109,15 @@ contract Democratic {
 	    issues[_operation].dissentingTotal -= votingStake[msg.sender];
 	}
 
+	// update user state
 	numParticipating[msg.sender]--;
-	issues[_operation].ballots[msg.sender] = Ballot.EMPTY;
+	issues[_operation].ballots[msg.sender] = Ballot.UNDECIDED;
     }
 
-    // Allow anybody to clear the space taken by a prior issue vote
+    // Allow anybody to clear the space occupied by a closed issue
     function clearVote(bytes32 _operation, address _addr) public {
 	if(block.timestamp < issues[_operation].initTime + voteDuration) {
-	    if(issues[_operation].ballots[_addr] != Ballot.EMPTY) {
+	    if(issues[_operation].ballots[_addr] != Ballot.UNDECIDED) {
 		numParticipating[_addr]--;
 	    }
 
@@ -120,21 +125,12 @@ contract Democratic {
 	}
     }
 
-    /// Public signalling of support/dissent for an open vote; return true if the voting duration
-    /// is over AND a sufficient majority has been reached
-    function checkVotes(bytes32 _operation, uint _percent, bool _suspend)
+    /// Updating voting state or tally final count if the deadline has passed
+    function checkVotes(bytes32 _operation, uint _percent)
 	private returns (bool) {
 
 	// if this is the first call then create a new issue and set the initial block time
 	if(issues[_operation].initTime == 0) {
-	    if(_suspend && usedSuspensions >= maxSuspensions) {
-		return false;
-	    }
-
-	    if(_suspend) {
-		usedSuspensions ++;
-		activeSuspensions++;
-	    }
 
 	    issues[_operation].initTime = block.timestamp;
 	    issues[_operation].threshold = _percent;
@@ -145,7 +141,6 @@ contract Democratic {
 
 	// if the voting period has ended then tally the votes and return the result
 	if (block.timestamp >= issues[_operation].initTime + voteDuration) {
-	    if(_suspend) activeSuspensions--;
 	    activeIssues--;
 	    issues[_operation].threshold = 5;
  	    uint total = issues[_operation].supportingTotal + issues[_operation].dissentingTotal;
@@ -155,11 +150,9 @@ contract Democratic {
 
     ///---------------------------------- Abstract Methods ----------------------------------///
 
-    function purchaseVotes(address, uint) internal returns (uint) {
-	// implement in child to freeze funds, etc
-    }
+    /// Update state in child contract to prevent sybil voting
+    function purchaseVotes(address _addr, uint _votes) internal returns (uint);
 
-    function returnVotes(address) internal {
-	// implement in child to unfreeze funds, etc
-    }
+    /// Restore pre-voting state to child contract
+    function returnVotes(address _addr) internal;
 }

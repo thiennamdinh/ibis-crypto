@@ -100,7 +100,7 @@ contract("Transfers", function(accounts) {
 	}).then(function(bool) {
 	    assert.equal(bool, true, "Should be a charity now");
 	    ethOld = web3.eth.getBalance(charity1)
-	    return ibis.withdrawOwner(charity1, withdraw1, {from: owner1});
+	    return ibis.withdrawFor(charity1, withdraw1, {from: owner1});
 	}).then(function() {
 	    return ibis.balanceOf(charity1);
 	}).then(function(balance) {

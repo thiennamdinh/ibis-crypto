@@ -1,22 +1,39 @@
+/**
+ * Define functions and modifiers needed to implement controlled ownership of an
+ * inheriting contract. This the Restricited class allows a multi-teired secure
+ * ownership system that allows for single-owner approval, multi-owner approval,
+ * and a limited number of last-resort operations by a "master" emergency
+ * address.
+ */
+
+//TODO implement suspension
+
 pragma solidity ^0.4.13;
 
 /// Defines various access striction modifiers to be used by inheriting class
 contract Restricted {
 
-    uint256 MAX_UINT256 = 2**256-1;
-    uint threshold;
-    mapping(address => bool) public owners;
+    uint256 MAX_UINT256 = 2**256-1;            // maximum unsigned integer value
+    uint threshold;                            // number of owners needed to pass multiowner operation
+    mapping(address => bool) public owners;    // flag registered owner addresses
 
-    address masterAddress;
+    address masterAddress;                     // address for limited last-resort operations
+    bool ownersDestructed;                     // flag signally that ownership notions are invalid
+    uint maxMasterOperations;                  // maximum number of uses of the master address
+    uint usedMasterOperations;                 // operations executed by the master address so far
 
+    // (operation -> map) map operations to list of owners supporting it
     mapping(bytes32 => mapping(address => bool)) public supporting;
-    mapping(bytes32 => uint) public numSupporting;
-    mapping(bytes32 => uint) public delayInitTime;
-    mapping(bytes32 => uint) public ownerInitTime;
 
-    uint public numOwners;
-    uint public delayDuration = 1000;
 
+    mapping(bytes32 => uint) public numSupporting;   // number of owners approving an operation
+    mapping(bytes32 => uint) public delayInitTime;   // time a delayed operation was initialized
+    mapping(bytes32 => uint) public ownerInitTime;   // time a multiowner operaiton was initialized
+
+    uint public numOwners;                           // number of owner addresses (excluding master)
+    uint public delayDuration = 1000;                // amount of time an operation is delayed
+
+    // restricted events
     event LogOwnerChange(address indexed _addr, bool isOwner);
     event LogChangeThreshold(uint thresh);
     event LogChangeDelay(uint thresh);
@@ -26,7 +43,7 @@ contract Restricted {
 
     /// Function is only accessible to owners
     modifier isOwner() {
-	require(owners[msg.sender] == true);
+	require(owners[msg.sender] || ownersDestructed);
 	_;
     }
 
@@ -39,10 +56,13 @@ contract Restricted {
 	delete ownerInitTime[_operation];
     }
 
+    /// Function can only be executed by the master address
     modifier isMaster() {
-	if(msg.sender == masterAddress) {
-	    _;
+	if(!checkMaster()) {
+	    assembly{stop}
 	}
+	_;
+	usedMasterOperations++;
     }
 
     /// Function call will be delayed by a set time regardless of approval
@@ -64,6 +84,7 @@ contract Restricted {
 
 	masterAddress = _masterAddress;
 
+	// add all given owners
 	for(uint256 i = 0; i < _ownerList.length; i++) {
 	    owners[_ownerList[i]] = true;
 	    numOwners++;
@@ -89,7 +110,7 @@ contract Restricted {
 	LogOwnerChange(_owner, false);
     }
 
-    /// Atomically swap out an owner address (avoids corner cases from changing # of owners)
+    /// Atomically swap out an owner address (avoids need to change thresholds)
     function switchOwner(address _old, address _new) public multiowner(keccak256(msg.data))
 	delayed(keccak256(msg.data)) {
 
@@ -155,6 +176,11 @@ contract Restricted {
 	}
     }
 
+    /// Check to see if call came from the master address and there are operations remaining
+    function checkMaster() public view returns (bool) {
+	return msg.sender == masterAddress && usedMasterOperations < maxMasterOperations;
+    }
+
     /// Check to see if the call has been sufficiently delayed and if so return true
     function checkDelay(bytes32 _operation) private returns (bool) {
 	if(delayInitTime[_operation] == 0) {
@@ -164,7 +190,9 @@ contract Restricted {
 	return block.timestamp >= delayInitTime[_operation] + delayDuration;
     }
 
+    /// Void all notions of ownership
     function RestrictedDestruct() internal {
+	ownersDestructed = true;
 	threshold = MAX_UINT256;
     }
 }

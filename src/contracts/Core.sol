@@ -3,16 +3,16 @@
  * valid for the rest of time. At any given point, there will be one master
  * controller contract for the currency. This controller will in turn delegate
  * the ability to modify core state. In the event of an upgrade to the
- * controller, approved contracts should be removed and a new address
- * supplied to the Core contract.
+ * controller, approved contracts should be removed and a new address supplied
+ * to the Core contract.
  *
  * The Core contract tracks precisely the following state:
- *     - ERC20 balances
+ *     - Token balances
  *     - ERC20 allowed spenders
  *     - Flags declaring designated charity addresses
- *     - Block number in which a charity was flagged
+ *     - Time at which a charity was last added
  *     - Temporarily frozen user funds
- *     - Block number in which funds were frozen
+ *     - Time at which funds were frozen
  */
 
 pragma solidity ^0.4.13;
