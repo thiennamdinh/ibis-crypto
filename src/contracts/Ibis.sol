@@ -126,8 +126,8 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     }
 
     /// Convert Ibis coins to Ether for message sender
-    function withdraw(uint _value) public /*suspendable*/ returns (bool) {
-	if ((core.charityStatus(msg.sender) || nuked) && _value <= core.balances(msg.sender)) {
+    function withdraw(uint _value) public returns (bool) {
+	if (core.charityStatus(msg.sender) && _value <= core.balances(msg.sender)) {
 	    core.setBalances(msg.sender, core.balances(msg.sender) - _value);
 	    totalSupply -= _value;
 	    msg.sender.transfer(_value);
@@ -137,8 +137,8 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     }
 
     /// Convert Ibis coins to Ether on behalf of a charity by an Ibis owner address
-    function withdrawFor(address _from, uint _value) public isOwner /*suspendable*/ returns (bool) {
-	if ((core.charityStatus(_from) || nuked) && _value <= core.balances(_from)) {
+    function withdrawFor(address _from, uint _value) public isOwner returns (bool) {
+	if (core.charityStatus(_from) && _value <= core.balances(_from)) {
 	    core.setBalances(_from, core.balances(_from) - _value);
 	    totalSupply -= _value;
 	    _from.transfer(_value);
@@ -195,7 +195,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     ///---------------------------------- Freeze Methods ------------------------------------///
 
     /// Suspend accounts by moving the existing balance into a mapping of frozen funds
-    function freezeAccounts(address[] _accounts) public isOwner /*suspendable*/ {
+    function freezeAccounts(address[] _accounts) public isOwner {
 	for(uint i = 0; i < _accounts.length; i++) {
 	    uint balance = core.balances(_accounts[i]);
 	    core.setBalances(_accounts[i], 0);
@@ -206,8 +206,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     }
 
     /// Reinstantiate frozen funds to the original account
-    function unfreezeAccounts(address[] _accounts) public isOwner delayed(keccak256(msg.data))
-	/*suspendable*/ {
+    function unfreezeAccounts(address[] _accounts) public isOwner delayed(keccak256(msg.data)) {
 	for(uint i = 0; i < _accounts.length; i++) {
 	    uint frozen = core.frozenValue(_accounts[i]);
 	    core.setFrozenValue(_accounts[i], 0);
@@ -272,7 +271,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     }
 
     /// Claim that a charity is the closest to the random target for an award
-    function claimAward(uint _time, address _charity) public /*suspendable*/ returns (bool) {
+    function claimAward(uint _time, address _charity) public returns (bool) {
 
 	// check that the target was set
 	if(awardRand[_time] == 0) {
@@ -295,7 +294,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     }
 
     /// Move funds into the balance of a winning charity after enough time has passed
-    function cashAward(uint _time, address _charity) public /*suspendable*/ returns (bool) {
+    function cashAward(uint _time, address _charity) public returns (bool) {
 
 	// check that the award claim period is over
 	if(_time > block.timestamp - awardMinTime) {
@@ -338,7 +337,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     ///---------------------------------- Upgrade Methods -----------------------------------///
 
     /// Normal path to propose a new controlling contract (multiowner + vote)
-    function upgradeStandard(address _addr) public multiowner(keccak256(msg.data)) /*suspendable*/
+    function upgradeStandard(address _addr) public multiowner(keccak256(msg.data))
 	votable(keccak256(msg.data), MAJORITY) {
 	upgrade(_addr);
     }
@@ -371,6 +370,32 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     function nuke() isMaster votable(keccak256(msg.data), SUPERMAJORITY) public {
 	RestrictedDestruct();
 	nuked = true;
+    }
+
+    /// Allow anbody to withdraw all funds, frozen or not
+    function withdrawNuked(uint _value) public {
+
+	// only allow if nuked
+	if(!nuked) {
+	    return;
+	}
+
+	// unfreeze funds if necessary
+	if(core.frozenValue(msg.sender) > 0) {
+	    uint frozen = core.frozenValue(msg.sender);
+	    core.setFrozenValue(msg.sender, 0);
+	    core.setFrozenTime(msg.sender, 0);
+	    core.setBalances(msg.sender, frozen);
+	    LogFreeze(msg.sender, false);
+	}
+
+	// withdraw funds
+	if (_value <= core.balances(msg.sender)) {
+	    core.setBalances(msg.sender, core.balances(msg.sender) - _value);
+	    totalSupply -= _value;
+	    msg.sender.transfer(_value);
+	    LogWithdraw(msg.sender, _value);
+	}
     }
 
     ///------------------------------ Democratic Interface ------------------------------///

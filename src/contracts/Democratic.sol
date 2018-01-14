@@ -8,8 +8,6 @@
 
 pragma solidity ^0.4.13;
 
-// TODO democratic events
-
 contract Democratic {
 
     // possible  voting states
@@ -29,10 +27,15 @@ contract Democratic {
     uint public voteDuration;       // window of time available to vote on an issue
 
     // variables to track voting issues
-    uint activeIssues;
-    mapping(bytes32 => Issue) public issues;            // map of active issues to be voted by the public
-    mapping(address => uint) public numParticipating;   //
+    uint activeIssues;                                  // number of issues currently open for vote
+    mapping(bytes32 => Issue) public issues;            // map of active issues to be voted on
+    mapping(address => uint) public numParticipating;   // number of issues participated by address
     mapping(address => uint) public votingStake;        // balance that a user has spent on voting power
+
+    // democratic events
+    event LogRegister(address indexed _addr, bool registered);
+    event LogVote(address indexed _addr, Ballot vote);
+    event LogIssue(bytes32 indexed _operation, string status);
 
     /// Function call must be approved by a majority of token stakeholders
     modifier votable(bytes32 _operation, uint percent) {
@@ -53,6 +56,7 @@ contract Democratic {
 	// cannot register if already registered
 	if(votingStake[msg.sender] == 0) {
 	    votingStake[msg.sender] = purchaseVotes(msg.sender, _votes);
+	    LogRegister(msg.sender, true);
 	}
     }
 
@@ -61,6 +65,7 @@ contract Democratic {
 	if(votingStake[msg.sender] != 0 && numParticipating[msg.sender] == 0) {
 	    delete votingStake[msg.sender];
 	    returnVotes(msg.sender);
+	    LogRegister(msg.sender, false);
 	}
     }
 
@@ -69,6 +74,7 @@ contract Democratic {
 	if(votingStake[_addr] != 0 && activeIssues == 0) {
 	    delete votingStake[_addr];
 	    returnVotes(_addr);
+	    LogRegister(_addr, false);
 	}
     }
 
@@ -84,10 +90,12 @@ contract Democratic {
 	if(_supporting) {
 	    issues[_operation].ballots[msg.sender] = Ballot.SUPPORTING;
 	    issues[_operation].supportingTotal += votingStake[msg.sender];
+	    LogVote(msg.sender, Ballot.SUPPORTING);
 	}
 	else {
 	    issues[_operation].ballots[msg.sender] = Ballot.DISSENTING;
 	    issues[_operation].dissentingTotal += votingStake[msg.sender];
+	    LogVote(msg.sender, Ballot.DISSENTING);
 	}
 
 	numParticipating[msg.sender]++;
@@ -112,6 +120,7 @@ contract Democratic {
 	// update user state
 	numParticipating[msg.sender]--;
 	issues[_operation].ballots[msg.sender] = Ballot.UNDECIDED;
+	LogVote(msg.sender, Ballot.UNDECIDED);
     }
 
     // Allow anybody to clear the space occupied by a closed issue
@@ -122,6 +131,7 @@ contract Democratic {
 	    }
 
 	    delete issues[_operation].ballots[_addr];
+	    LogVote(_addr, Ballot.UNDECIDED);
 	}
     }
 
@@ -136,6 +146,7 @@ contract Democratic {
 	    issues[_operation].threshold = _percent;
 	    activeIssues++;
 
+	    LogIssue(_operation, "initialized");
 	    return false;
 	}
 
@@ -143,7 +154,10 @@ contract Democratic {
 	if (block.timestamp >= issues[_operation].initTime + voteDuration) {
 	    activeIssues--;
 	    issues[_operation].threshold = 5;
+
  	    uint total = issues[_operation].supportingTotal + issues[_operation].dissentingTotal;
+
+	    LogIssue(_operation, "closed");
 	    return issues[_operation].supportingTotal * 100 > total * issues[_operation].threshold;
 	}
     }

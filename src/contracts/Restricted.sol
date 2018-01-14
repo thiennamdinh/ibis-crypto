@@ -35,7 +35,7 @@ contract Restricted {
     event LogOwnerChange(address indexed _addr, bool isOwner);
     event LogChangeThreshold(uint thresh);
     event LogChangeDelay(uint thresh);
-    event LogNuke();
+    event LogMasterOperation();
 
     ///--------------------------------- Function Modifiers ---------------------------------///
 
@@ -175,7 +175,8 @@ contract Restricted {
     }
 
     /// Check to see if call came from the master address and there are operations remaining
-    function checkMaster() public view returns (bool) {
+    function checkMaster() public returns (bool) {
+	LogMasterOperation();
 	return msg.sender == masterAddress && usedMasterOperations < maxMasterOperations;
     }
 
