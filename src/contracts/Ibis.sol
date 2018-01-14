@@ -35,10 +35,11 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
 
     // address freezing/redistribution state
     uint public awardMax = 1e18;                      // maximum amount to be claimed in one award
-    uint public frozenMinTime = 1000;                 // min time between freezing and redistribution
-    uint public awardMinTime = 1000;                  // min time to wait for charities to claim reward
+    uint public frozenMinTime = 10000;                // min time between freezing and redistribution
+    uint public awardMinTime = 10000;                 // min time to wait for charities to claim reward
     mapping(uint => uint) public awardValue;          // (time->tokens) value of a single award
-    mapping(uint => uint) public awardTarget;         // (time->hash) target for charity to claim award
+    mapping(uint => uint) public awardBlock;          // (time->block) used to set the target
+    mapping(uint => uint) public awardRand;           // (time->hash) randomness used to select winner
     mapping(uint => uint) public awardClosest;        // (time->hash) closest charity so far
 
     mapping(address => bool) public frozenVoted;      // votes cast by frozen accounts
@@ -217,7 +218,7 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     }
 
     /// Liquidate frozen accounts and allow a random charity to claim the funds
-    function awardExcess(address[] _accounts) public isOwner delayed(keccak256(msg.data))
+    function awardFrozen(address[] _accounts) public isOwner delayed(keccak256(msg.data))
 	votable(keccak256(msg.data), MAJORITY) {
 	uint frozenAward;
 
@@ -244,23 +245,49 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
 
 	// prepare reward slot
         awardValue[block.timestamp] = frozenAward;
-	awardTarget[block.timestamp] = uint(block.blockhash(block.number));
-	awardClosest[block.timestamp] = awardTarget[block.timestamp] + (MAX_UINT256 / 2);
+	awardBlock[block.timestamp] = block.number;
 	LogAward(block.timestamp, address(0), "initialized");
+    }
+
+    /// Set the award target for a given timestamp to hash of the specified block
+    function setTarget(uint _time) public {
+
+	// disallow premature and redudant target setting
+	if(awardBlock[_time] == 0 || awardRand[_time] != 0) {
+	    return;
+	}
+
+	uint targetBlock = awardBlock[_time];
+
+	// usually, the target block will just be the one specified by
+	// awardBlock, but since Ethereum only stores the last 256 block hashes
+	// we need to make sure we don't loose a source of randomness forever
+	if(block.number - targetBlock > 256) {
+	    targetBlock = (block.number - 1) - ((block.number - awardBlock[_time]) % 256);
+	}
+
+	awardRand[_time] = uint(block.blockhash(targetBlock));
+	awardClosest[_time] = MAX_UINT256;
+	LogAward(_time, address(0), "set");
     }
 
     /// Claim that a charity is the closest to the random target for an award
     function claimAward(uint _time, address _charity) public /*suspendable*/ returns (bool) {
 
-	// addresses only eligible if they were created before the randomly generated target
-	if(core.charityTime(_charity) < _time) {
+	// check that the target was set
+	if(awardRand[_time] == 0) {
 	    return false;
 	}
 
-	// charity "closeness" is defined as the hash of its address
-	uint challenge = uint(keccak256(_charity));
+	// addresses only eligible if they were created before the randomly generated target
+	if(core.charityTime(_charity) >= _time) {
+	    return false;
+	}
 
-	if(awardTarget[_time] - uint(_charity) < awardTarget[_time] - awardClosest[_time]) {
+	// charity "closeness" defined as Hash(address + rand); smaller is better
+	uint challenge = uint(keccak256(uint(_charity) + awardRand[_time]));
+
+	if(challenge < awardClosest[_time]) {
 	    awardClosest[_time] = challenge;
 	    LogAward(_time, _charity, "claimed");
 	    return true;
@@ -270,12 +297,19 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     /// Move funds into the balance of a winning charity after enough time has passed
     function cashAward(uint _time, address _charity) public /*suspendable*/ returns (bool) {
 
-	uint claim = uint(keccak256(_charity));
+	// check that the award claim period is over
+	if(_time > block.timestamp - awardMinTime) {
+	    return false;
+	}
 
-	if(_time <= block.timestamp - awardMinTime && awardClosest[_time] == claim) {
+	uint claim = uint(keccak256(uint(_charity) + awardRand[_time]));
+
+	// if the claim is valid then clean up and allocate the award
+	if(awardClosest[_time] == claim) {
 	    uint award = awardValue[_time];
 	    delete awardValue[_time];
-	    delete awardTarget[_time];
+	    delete awardBlock[_time];
+	    delete awardRand[_time];
 	    delete awardClosest[_time];
 	    core.setBalances(_charity, core.balances(_charity) + award);
 	    LogAward(_time, _charity, "awarded");

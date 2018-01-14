@@ -1,7 +1,6 @@
-// TODO: delay problem
-
 var Core = artifacts.require("Core");
 var Ibis = artifacts.require("Ibis");
+
 
 contract("Freeze", function(accounts) {
 
@@ -29,6 +28,7 @@ contract("Freeze", function(accounts) {
 
     var awardIssue;
     var awardTime;
+    var awardRand;
 
 
     it("should be set up", function() {
@@ -112,12 +112,12 @@ contract("Freeze", function(accounts) {
 	    var wait = {jsonrpc: "2.0", method: "evm_increaseTime", params: [frozenMinTime], id: 0};
 	    return web3.currentProvider.send(wait);
  	}).then(function(transaction) {
-	    return ibis.awardExcess([user1, user2], {from: owner1});
+	    return ibis.awardFrozen([user1, user2], {from: owner1});
 	}).then(function() {
 	    var wait = {jsonrpc: "2.0", method: "evm_increaseTime", params: [delayDuration], id: 0};
 	    return web3.currentProvider.send(wait);
  	}).then(function() {
-	    return ibis.awardExcess([user1, user2], {from: owner1});
+	    return ibis.awardFrozen([user1, user2], {from: owner1});
 	}).then(function(transaction) {
 	    var data = web3.eth.getTransaction(transaction.tx).input
 	    awardIssue = web3.sha3(data, {encoding: "hex"});
@@ -128,9 +128,11 @@ contract("Freeze", function(accounts) {
 	    var wait = {jsonrpc: "2.0", method: "evm_increaseTime", params: [voteDuration], id: 0};
 	    return web3.currentProvider.send(wait);
 	}).then(function() {
-	    return ibis.awardExcess([user1, user2], {from: owner1});
+	    return ibis.awardFrozen([user1, user2], {from: owner1});
 	}).then(function(transaction) {
 	    awardTime = web3.eth.getBlock(transaction.receipt.blockNumber).timestamp;
+	    var blockhash = web3.eth.getBlock(transaction.receipt.blockNumber).hash;
+	    awardRand = web3.toBigNumber(blockhash);
 	    return ibis.awardValue(awardTime);
 	}).then(function(result) {
 	    assert.equal(result.toNumber(), deposit1, "Award value incorrect");
@@ -138,24 +140,50 @@ contract("Freeze", function(accounts) {
     });
 
     it("should allow charities to claim awards", function() {
-	console.log(charity1);
 
-	var hash = web3.sha3(charity1, {encoding: "hex"});
-	console.log(hash);
+	var target;
 
-	var deci1 = web3.toDecimal(hash.slice(0, 16));
-	var deci2 = web3.toDecimal(hash.slice(0, 16));
+	var winningCharity;
+	var winningDiff;
 
-	console.log(deci);
+	var losingCharity;
+	var losingDiff;
 
-	var hash2 = web3.fromDecimal(deci);
-	console.log(hash2);
+	return ibis.setTarget(awardTime).then(function(result) {
+	    return ibis.awardRand(awardTime);
+	}).then(function(result) {
+	    assert.equal(result.toString(), awardRand.toString(), "Incorrect award target");
+
+	    var diffStr1 = web3.sha3(web3.toHex(result.plus(charity1)), {encoding: "hex"});
+	    var diffStr2 = web3.sha3(web3.toHex(result.plus(charity2)), {encoding: "hex"});
+
+	    var diff1 = web3.toBigNumber(diffStr1);
+	    var diff2 = web3.toBigNumber(diffStr2);
+
+	    winningCharity = (diff1.lessThan(diff2)) ? charity1 : charity2;
+	    winningDiff = (diff1.lessThan(diff2)) ? diff1 : diff2;
+
+	    losingCharity = (diff1.lessThan(diff2)) ? charity2 : charity1;
+	    losingDiff = (diff1.lessThan(diff2)) ? diff2 : diff1;
+
+	    return ibis.claimAward(awardTime, losingCharity);
+	}).then(function() {
+	    return ibis.awardClosest(awardTime);
+	}).then(function(result) {
+	    assert.equal(result.toString(), losingDiff.toString(), "Incorrect losing claim");
+	    return ibis.claimAward(awardTime, winningCharity);
+	}).then(function() {
+	    return ibis.awardClosest(awardTime);
+	}).then(function(result) {
+	    assert.equal(result.toString(), winningDiff.toString(), "Incorrect winning claim");
+	    var wait = {jsonrpc: "2.0", method: "evm_increaseTime", params: [awardMinTime], id: 0};
+	    return web3.currentProvider.send(wait);
+	}).then(function() {
+	    return ibis.cashAward(awardTime, winningCharity);
+	}).then(function() {
+	    return ibis.balanceOf(winningCharity);
+	}).then(function(result) {
+	    assert.equal(result.toNumber(), deposit1, "Award not successfully claimed by charity");
+	});
     });
-
-    // charity 1 claims funds
-    // charity 2 claims funds
-    // charity 2 attempts to cash out
-    // wait a while
-    // charity 2 actually cashes out
-
 });

@@ -6,8 +6,6 @@
  * address.
  */
 
-//TODO implement suspension
-
 pragma solidity ^0.4.13;
 
 /// Defines various access striction modifiers to be used by inheriting class

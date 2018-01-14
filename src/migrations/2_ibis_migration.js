@@ -29,7 +29,6 @@ module.exports = function(deployer, network, accounts) {
 	core.addApproved(Ibis.address, {from: owner1, gasPrice: price})
     }).then(function() {
 	core.upgrade(Ibis.address, {from: owner1, gasPrice: price});
-	console.log("updated");
     });
 
     if(network == "development"){
