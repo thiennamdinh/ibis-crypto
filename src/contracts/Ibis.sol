@@ -217,8 +217,8 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     }
 
     /// Liquidate frozen accounts and allow a random charity to claim the funds
-    function awardFrozen(address[] _accounts) public isOwner delayed(keccak256(msg.data))
-	votable(keccak256(msg.data), MAJORITY) {
+    function awardFrozen(address[] _accounts) public isOwner suspendable
+	delayed(keccak256(msg.data)) votable(keccak256(msg.data), MAJORITY) {
 	uint frozenAward;
 
 	// loop through frozen accounts to be liquidated
@@ -337,19 +337,19 @@ contract Ibis is ERC20, ERC223, Restricted, Democratic {
     ///---------------------------------- Upgrade Methods -----------------------------------///
 
     /// Normal path to propose a new controlling contract (multiowner + vote)
-    function upgradeStandard(address _addr) public multiowner(keccak256(msg.data))
+    function upgradeStandard(address _addr) public suspendable multiowner(keccak256(msg.data))
 	votable(keccak256(msg.data), MAJORITY) {
 	upgrade(_addr);
     }
 
     /// Emergency path to upgrade a contract if majority owner keys have been compromised
-    function upgradeEmergency(address _addr) public isOwner
+    function upgradeEmergency(address _addr) public isOwner suspendable
 	votable(keccak256(msg.data), SUPERMAJORITY) {
 	upgrade(_addr);
     }
 
     /// Emergency path to instantly upgrade if something has gone wrong within the grace period
-    function upgradeInitial(address _addr) public isOwner() {
+    function upgradeInitial(address _addr) public isOwner() suspendable {
 	if(graceInit + graceDuration < block.timestamp) {
 	    upgrade(_addr);
 	}
